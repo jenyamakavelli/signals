@@ -6,12 +6,13 @@ import pandas as pd
 # 📌 Настройки
 # ---------------------------
 DISCORD_WEBHOOK = "https://discord.com/api/webhooks/1405226935604215838/OQElV-CBe-_Hb4D13nSR-OZDG4jaGznQok62qv_AJw6glQzA3blizSvbTugn9sD8yxRA"
-PAIRS = ["EURUSD", "GBPUSD", "USDJPY"]  # только валютные пары
-SLEEP_INTERVAL = 60  # интервал в секундах
+PAIRS = [("EUR","USD"), ("GBP","USD"), ("USD","JPY")]  # список валютных пар (BASE, QUOTE)
+SLEEP_INTERVAL = 60  # интервал между проверками в секундах
 EMA_PERIOD = 10
 RSI_PERIOD = 14
 RSI_OVERBOUGHT = 70
 RSI_OVERSOLD = 30
+MAX_HISTORY = 100  # максимальное количество цен для индикаторов
 
 # ---------------------------
 # 📌 Хранилище цен
@@ -22,21 +23,23 @@ price_history = {pair: [] for pair in PAIRS}
 # 📌 Функции
 # ---------------------------
 def send_to_discord(message):
-    requests.post(DISCORD_WEBHOOK, json={"content": message})
+    try:
+        requests.post(DISCORD_WEBHOOK, json={"content": message}, timeout=5)
+    except Exception as e:
+        print(f"⚠️ Ошибка при отправке в Discord: {e}")
 
 def get_price(pair):
-    base = pair[:3]
-    quote = pair[3:]
+    base, quote = pair
     url = f"https://api.exchangerate.host/latest?base={base}&symbols={quote}"
     try:
         r = requests.get(url, timeout=10)
         data = r.json()
         if not data.get("success", False):
-            print(f"⚠️ Exchangerate.host вернул success=False для {pair}")
+            print(f"⚠️ Exchangerate.host вернул success=False для {base}/{quote}")
             return None
         return float(data["rates"][quote])
     except Exception as e:
-        print(f"⚠️ Ошибка при получении {pair}: {e}")
+        print(f"⚠️ Ошибка при получении {base}/{quote}: {e}")
         return None
 
 def calculate_ema(series, period):
@@ -66,10 +69,10 @@ def main():
             if price is None:
                 continue
 
-            # Обновляем историю (храним последние 100 цен)
+            # Обновляем историю цен
             history = price_history[pair]
             history.append(price)
-            if len(history) > 100:
+            if len(history) > MAX_HISTORY:
                 history.pop(0)
 
             # Рассчитываем индикаторы только если истории достаточно
@@ -77,14 +80,16 @@ def main():
                 ema = calculate_ema(history, EMA_PERIOD)
                 rsi = calculate_rsi(history, RSI_PERIOD)
                 signal = None
+
+                # Логика сигналов
                 if price > ema and rsi < RSI_OVERBOUGHT:
                     signal = "BUY"
                 elif price < ema and rsi > RSI_OVERSOLD:
                     signal = "SELL"
 
-                # Отправляем сигнал только если он новый
+                # Отправка сигнала только если он новый
                 if signal and signal != last_signal[pair]:
-                    send_to_discord(f"💡 {pair} сигнал: {signal}\nЦена: {price:.5f}, EMA{EMA_PERIOD}: {ema:.5f}, RSI{RSI_PERIOD}: {rsi:.2f}")
+                    send_to_discord(f"💡 {pair[0]}/{pair[1]} сигнал: {signal}\nЦена: {price:.5f}, EMA{EMA_PERIOD}: {ema:.5f}, RSI{RSI_PERIOD}: {rsi:.2f}")
                     last_signal[pair] = signal
 
         time.sleep(SLEEP_INTERVAL)

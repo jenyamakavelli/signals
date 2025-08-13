@@ -30,21 +30,28 @@ def send_to_discord(message):
 
 def get_price(pairs):
     """Запрашиваем сразу все пары одним запросом"""
+    if not pairs:
+        return {}
+
     url = f"https://www.freeforexapi.com/api/live?pairs={','.join(pairs)}"
     try:
         r = requests.get(url, timeout=10)
         r.raise_for_status()
-        data = r.json()
+        data = r.json() if r.content else {}
 
-        # Проверка ответа
-        if data is None or "rates" not in data or data.get("code") != 200:
-            print(f"⚠️ Некорректный ответ от Free Forex API: {data}")
+        # Проверяем, что это словарь и содержит rates
+        if not isinstance(data, dict):
+            print(f"⚠️ Некорректный ответ API (не dict): {data}")
+            return {}
+        if "rates" not in data or data.get("code") != 200:
+            print(f"⚠️ Некорректный ответ API: {data}")
             return {}
 
         rates = {}
         for pair in pairs:
-            if pair in data["rates"]:
-                rates[pair] = data["rates"][pair]["rate"]
+            rate_info = data["rates"].get(pair)
+            if rate_info is not None:
+                rates[pair] = rate_info.get("rate")
             else:
                 print(f"⚠️ Нет котировки для {pair} в ответе API")
         return rates

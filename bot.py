@@ -29,8 +29,12 @@ def get_price(pair):
     quote = pair[3:]
     url = f"https://api.exchangerate.host/latest?base={base}&symbols={quote}"
     try:
-        r = requests.get(url, timeout=10).json()
-        return float(r["rates"][quote])
+        r = requests.get(url, timeout=10)
+        data = r.json()
+        if not data.get("success", False):
+            print(f"⚠️ Exchangerate.host вернул success=False для {pair}")
+            return None
+        return float(data["rates"][quote])
     except Exception as e:
         print(f"⚠️ Ошибка при получении {pair}: {e}")
         return None

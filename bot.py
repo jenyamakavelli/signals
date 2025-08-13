@@ -6,7 +6,7 @@ import pandas as pd
 # 📌 Настройки
 # ---------------------------
 DISCORD_WEBHOOK = "https://discord.com/api/webhooks/1405226935604215838/OQElV-CBe-_Hb4D13nSR-OZDG4jaGznQok62qv_AJw6glQzA3blizSvbTugn9sD8yxRA"
-PAIRS = [("EUR","USD"), ("GBP","USD"), ("USD","JPY")]  # список валютных пар (BASE, QUOTE)
+PAIRS = ["EURUSD", "GBPUSD", "USDJPY"]  # валютные пары
 SLEEP_INTERVAL = 60  # интервал между проверками в секундах
 EMA_PERIOD = 10
 RSI_PERIOD = 14
@@ -28,19 +28,19 @@ def send_to_discord(message):
     except Exception as e:
         print(f"⚠️ Ошибка при отправке в Discord: {e}")
 
-def get_price(pair):
-    base, quote = pair
-    url = f"https://api.exchangerate.host/latest?base={base}&symbols={quote}"
+def get_price(pairs):
+    """Запрашиваем сразу все пары одним запросом"""
+    url = f"https://www.freeforexapi.com/api/live?pairs={','.join(pairs)}"
     try:
-        r = requests.get(url, timeout=10)
-        data = r.json()
-        if not data.get("success", False):
-            print(f"⚠️ Exchangerate.host вернул success=False для {base}/{quote}")
-            return None
-        return float(data["rates"][quote])
+        r = requests.get(url, timeout=10).json()
+        if r.get("code") != 200:
+            print(f"⚠️ Free Forex API вернул код {r.get('code')}")
+            return {}
+        rates = {pair: r["rates"][pair]["rate"] for pair in pairs}
+        return rates
     except Exception as e:
-        print(f"⚠️ Ошибка при получении {base}/{quote}: {e}")
-        return None
+        print(f"⚠️ Ошибка при получении котировок: {e}")
+        return {}
 
 def calculate_ema(series, period):
     return pd.Series(series).ewm(span=period, adjust=False).mean().iloc[-1]
@@ -61,14 +61,15 @@ def calculate_rsi(series, period):
 # ---------------------------
 def main():
     last_signal = {pair: None for pair in PAIRS}
-    send_to_discord("✅ Forex скрипт запущен!")
+    send_to_discord("✅ Forex скрипт на Free Forex API запущен!")
 
     while True:
-        for pair in PAIRS:
-            price = get_price(pair)
-            if price is None:
-                continue
+        rates = get_price(PAIRS)
+        if not rates:
+            time.sleep(SLEEP_INTERVAL)
+            continue
 
+        for pair, price in rates.items():
             # Обновляем историю цен
             history = price_history[pair]
             history.append(price)
@@ -89,7 +90,7 @@ def main():
 
                 # Отправка сигнала только если он новый
                 if signal and signal != last_signal[pair]:
-                    send_to_discord(f"💡 {pair[0]}/{pair[1]} сигнал: {signal}\nЦена: {price:.5f}, EMA{EMA_PERIOD}: {ema:.5f}, RSI{RSI_PERIOD}: {rsi:.2f}")
+                    send_to_discord(f"💡 {pair} сигнал: {signal}\nЦена: {price:.5f}, EMA{EMA_PERIOD}: {ema:.5f}, RSI{RSI_PERIOD}: {rsi:.2f}")
                     last_signal[pair] = signal
 
         time.sleep(SLEEP_INTERVAL)

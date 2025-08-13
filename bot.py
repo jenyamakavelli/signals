@@ -21,12 +21,17 @@ def send_to_discord(message):
 
 def get_price_history(pair, interval="1m", range_="1d"):
     url = f"https://query1.finance.yahoo.com/v8/finance/chart/{pair}?interval={interval}&range={range_}"
-    r = requests.get(url).json()
     try:
-        close = r["chart"]["result"][0]["indicators"]["quote"][0]["close"]
+        r = requests.get(url, timeout=10)
+        if r.status_code != 200:
+            print(f"⚠️ Yahoo ответил кодом {r.status_code} для {pair}")
+            return pd.Series([])
+        data = r.json()
+        close = data["chart"]["result"][0]["indicators"]["quote"][0]["close"]
         close = [c for c in close if c is not None]
         return pd.Series(close)
-    except:
+    except Exception as e:
+        print(f"⚠️ Ошибка при получении {pair}: {e}")
         return pd.Series([])
 
 def calculate_ema(series, period):

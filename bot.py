@@ -32,11 +32,21 @@ def get_price(pairs):
     """Запрашиваем сразу все пары одним запросом"""
     url = f"https://www.freeforexapi.com/api/live?pairs={','.join(pairs)}"
     try:
-        r = requests.get(url, timeout=10).json()
-        if r.get("code") != 200:
-            print(f"⚠️ Free Forex API вернул код {r.get('code')}")
+        r = requests.get(url, timeout=10)
+        r.raise_for_status()
+        data = r.json()
+
+        # Проверка ответа
+        if data is None or "rates" not in data or data.get("code") != 200:
+            print(f"⚠️ Некорректный ответ от Free Forex API: {data}")
             return {}
-        rates = {pair: r["rates"][pair]["rate"] for pair in pairs}
+
+        rates = {}
+        for pair in pairs:
+            if pair in data["rates"]:
+                rates[pair] = data["rates"][pair]["rate"]
+            else:
+                print(f"⚠️ Нет котировки для {pair} в ответе API")
         return rates
     except Exception as e:
         print(f"⚠️ Ошибка при получении котировок: {e}")
